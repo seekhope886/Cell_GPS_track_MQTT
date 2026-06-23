@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>MQTT GPS 背景即時地圖監測站</title>
+    <!-- 1. 引入 MQTT.js 函式庫 -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    
+    <!-- 2. 引入 Leaflet 地圖的 CSS 與 JS (完全免費且免金鑰) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        /* 建立左右平分的佈局 */
+        html, body { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
+        .container { display: flex; height: 100%; width: 100%; }
+        
+        /* 左邊地圖區塊 */
+        #map { flex: 1; height: 100%; background: #e0e0e0; }
+        
+        /* 右邊資訊控制面板 */
+        .panel { width: 350px; background: #f4f4f9; padding: 20px; box-sizing: border-box; box-shadow: -2px 0 5px rgba(0,0,0,0.1); z-index: 1000; overflow-y: auto; }
+        
+        h2 { margin-top: 0; color: #333; font-size: 1.5em; }
+        .status { font-weight: bold; color: gray; }
+        .connected { color: green; }
+        .disconnected { color: red; }
+        .data-box { background: white; padding: 15px; border-radius: 5px; margin-top: 15px; font-size: 1.1em; font-family: monospace; border: 1px solid #ddd; word-break: break-all; }
+        .btn-map { display: inline-block; margin-top: 15px; padding: 10px 15px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; text-align: center; width: 100%; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- 左邊：OpenStreetMap 地圖 -->
+        <div id="map"></div>
+        
+        <!-- 右邊：數據監控面板 -->
+        <div class="panel">
+            <h2>📡 GPS 即時監測站</h2>
+            <p>連線狀態：<span id="status" class="status">正在連線...</span></p>
+            
+            <h3>最新座標資料：</h3>
+            <div id="coordinate" class="data-box">尚未收到定位資料</div>
+            
+            <!-- 原有的備用 Google Maps 外跳連結 -->
+            <a id="map-link" class="btn-map" href="#" target="_blank" style="display: none;">🗺️ 在 Google 地圖打開</a>
+        </div>
+    </div>
+
+    <script>
+        // 1. 在最外層宣告一個用來存每台車歷史路徑的物件
+        let travelPaths = {}; 
+
+
+        // ==================== 1. 初始化 Leaflet 地圖 ====================
+        // 預設中心點設在台灣 (緯度 23.6, 經度 121.0)，縮放層級設為 7
+        const map = L.map('map').setView([23.6, 121.0], 7);
+
+        // 載入免費的 OpenStreetMap 圖資
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        // 建立一個在地圖上移動的大頭針 (Marker)
+        let marker = {};
+
+
+        // ==================== 2. MQTT 連線設定 ====================
+        const brokerUrl = 'wss://your.url.s1.eu.hivemq.cloud:8884/mqtt'; 
+        const topic = 'mycar/gps';
+
+        const statusEl = document.getElementById('status');
+        const coordEl = document.getElementById('coordinate');
+        const mapLinkEl = document.getElementById('map-link');
+
+        const client = mqtt.connect(brokerUrl, {
+            clientId: 'web_monitor_' + Math.random().toString(16).substr(2, 8),
+            username: 'username', // 👈 這裡一定要填寫您在 HiveMQ 建立的專屬使用者名稱
+            password: 'password', // 👈 這裡一定要填寫該使用者的密碼
+            rejectUnauthorized: true
+        });
+
+        client.on('connect', () => {
+            statusEl.innerText = '已成功連線伺服器';
+            statusEl.className = 'status connected';
+            client.subscribe(topic);
+        });
+
+        client.on('close', () => {
+            statusEl.innerText = '連線已斷開';
+            statusEl.className = 'status disconnected';
+        });
+
+        // ==================== 3. 接收訊息與地圖連動 ====================
+        client.on('message', (receivedTopic, payload) => {
+            const messageStr = payload.toString().trim();
+            coordEl.innerText = messageStr;
+            
+            // 拆解經緯度文字 (例如 "25.033121,121.564222")
+            const coords = messageStr.split(',');
+            if (coords.length === 3) {
+                const deviceID = coords[0].trim();  // 取得手機代碼 (如 Car_8543)
+                const lat = parseFloat(coords[1].trim());
+                const lon = parseFloat(coords[2].trim());
+                
+                // 檢查數值是否為有效數字
+                if (!isNaN(lat) && !isNaN(lon)) {
+                    // 2. 在接收到 message 且 lat/lon 解析成功的區塊內：
+                    if (!travelPaths[deviceID]) {
+                        // 第一次出現：幫這台車建立專屬的座標陣列，並在地圖上畫出一條空線條
+                        travelPaths[deviceID] = [];
+                        travelPaths[deviceID].polyline = L.polyline([], {color: 'red', weight: 4}).addTo(map);
+                    }
+                    // 每次收到新座標，就把座標推入該車輛的陣列，並更新線條
+                    const newLatLng = [lat, lon];
+                    travelPaths[deviceID].push(newLatLng);
+                    travelPaths[deviceID].polyline.setLatLngs(travelPaths[deviceID]);
+
+                       // 💡 新增以下這段：當收到最新經緯度時，自動記錄當下的時間
+                    const msgTime = new Date();
+                    const updateTimeString = msgTime.getHours().toString().padStart(2, '0') + ':' +
+                                             msgTime.getMinutes().toString().padStart(2, '0') + ':' +
+                                             msgTime.getSeconds().toString().padStart(2, '0');
+                 
+                    // A. 更新或建立地圖上的大頭針位置
+                    if (!marker[deviceID]) {
+                        // 第一次收到座標：建立標記並加到地圖中
+                        marker[deviceID] = L.marker([lat, lon])
+                        .addTo(map)
+                        .bindPopup(`<b>ID:</b> ${deviceID}<br><b>當前座標:</b> ${lat}, ${lon}`);
+                    marker[deviceID].openPopup();
+                    marker[deviceID].on('click', function(e) {
+                        this.openPopup();
+                        });
+                    } else {
+                        // 後續收到座標：直接更新大頭針的位置
+                        marker[deviceID].setLatLng([lat, lon]);
+                        marker[deviceID].setPopupContent(`<b>ID:</b> ${deviceID}<br><b>最新座標:</b> ${lat}, ${lon}<br><b>更新時間:</b> ${updateTimeString}`);
+                    }
+                    
+                    // B. 讓左邊地圖平滑移動到新座標，並自動放大到城市街區層級 (縮放級別 16)
+                    map.setView([lat, lon], 16);
+
+
+                    // C. 更新右側備用的 Google 地圖連結
+                    mapLinkEl.href = `https://google.com/maps/search/?api=1&query=${lat},${lon}`;
+                    mapLinkEl.style.display = 'block';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
