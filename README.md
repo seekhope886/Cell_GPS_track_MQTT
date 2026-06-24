@@ -1,6 +1,7 @@
 # Cell_GPS_track_MQTT<br>
 track cell GPS with MQTT<br><br>
-手機端程式:<br>
+2026.06.23<br>
+手機端程式開放原碼:<br>
 1.GPSrecord.aia 使用mit app inventos 2 開啟<br>
 2.下載必須DeviceFingerprint: Uniquely identify devices 擴充<br>
 3.下載必須UrsAI2PahoMqtt 擴充<br>
@@ -13,4 +14,9 @@ track cell GPS with MQTT<br><br>
 2.找一個webserver將gpsMQTTmap.html置入<br>
 3.由電腦端或手機端開啟webserver的gpsMQTTmap.html<br>
 4.gpsMQTTmap.html將會實時接收有執行GPSrecord的GSP位址並在畫面地圖上顯示最後位置及移動軌跡<br>
-
+<br>
+2026.06.24<br>
+新增可以排程手機端程式開放原碼<br>
+1.GPSrecord_Sche.aia<br>
+<br>
+by halin<br>
