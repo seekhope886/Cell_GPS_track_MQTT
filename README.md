@@ -13,7 +13,9 @@ track cell GPS with MQTT<br><br>
 1.開啟gpsMQTTmap.html並找到MQTT的broker填入要連接的MQTT伺服器位址以及使用者帳號密碼<br>
 2.找一個webserver將gpsMQTTmap.html置入<br>
 3.由電腦端或手機端開啟webserver的gpsMQTTmap.html<br>
-4.gpsMQTTmap.html將會實時接收有執行GPSrecord的GSP位址並在畫面地圖上顯示最後位置及移動軌跡<br>
+4.gpsMQTTmap.html將會實時接收有執行GPSrecord的GSP位址並在畫面地圖上顯示最後位置及移
+動軌跡<br>
+<img width="707" height="375" alt="gpstrack_mqtt" src="https://github.com/user-attachments/assets/124540d4-1255-4906-b438-4f4f34b13e1a" /><br>
 <br>
 2026.06.24<br>
 新增可以排程手機端程式開放原碼<br>
